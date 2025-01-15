@@ -115,6 +115,49 @@ cat examples/technical.txt | kokoro-tts --voice "af_bella:0.6,am_adam:0.4"
 cat examples/mixed.txt | kokoro-tts --voice "bf_emma:0.5,af_sarah:0.5"
 ```
 
+### Server Mode
+
+For faster repeated processing, you can run Kokoro TTS in server mode. This keeps the model loaded in memory, significantly reducing processing time for subsequent requests.
+
+1. Start the server in one terminal:
+```bash
+# Start with default settings (localhost:5000)
+kokoro-tts-server
+
+# Custom host and port
+kokoro-tts-server --host 0.0.0.0 --port 5001
+```
+
+2. Use the client in another terminal:
+```bash
+# Basic usage
+echo 'Hello!' | kokoro-tts-client
+
+# All regular options work with the client
+echo 'Mixed voice test' | kokoro-tts-client --voice "af_bella:0.7,bf_emma:0.3" --speed 1.2
+
+# Process files
+cat story.txt | kokoro-tts-client --voice af_bella
+
+# Save to audio file
+cat script.txt | kokoro-tts-client --save output.wav
+```
+
+Server options:
+- `--host`: Server host (default: localhost)
+- `--port`: Server port (default: 5000)
+- `--kokoro-path`: Path to Kokoro-82M directory
+
+Client options:
+- All options available in regular mode (voice, speed, save, etc.)
+- `--host`: Server host (default: localhost)
+- `--port`: Server port (default: 5000)
+
+The server mode is particularly useful when:
+- Processing multiple texts in succession
+- Running a TTS service on a powerful machine
+- Reducing startup time for frequent TTS operations
+
 ## Available Voices
 
 American English (en-us):

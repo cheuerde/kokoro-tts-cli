@@ -363,6 +363,23 @@ Interactive Mode Controls:
   Left/Right:   Adjust speed
   Esc:          Exit
 
+Server/Client Usage:
+------------------
+For faster repeated processing, you can run a persistent server:
+
+1. Start the server in one terminal:
+   kokoro-tts-server [--host HOST] [--port PORT]
+
+2. Use the client in another terminal:
+   echo 'Your text' | kokoro-tts-client [options]
+   
+The server keeps the model loaded in memory for faster processing.
+All regular options (voice, speed, etc.) work with the client.
+
+Server options:
+  --host HOST     Server host (default: localhost)
+  --port PORT     Server port (default: 5000)
+
 Examples:
 --------
 1. Basic TTS:
