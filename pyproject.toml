@@ -1,0 +1,35 @@
+# pyproject.toml
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kokoro-tts-cli"
+version = "0.1.0"
+authors = [
+    { name="Claas Heuer", email="claasheuer@googlemail.com" },
+]
+description = "Command line interface for Kokoro TTS with streaming and voice mixing capabilities"
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "torch>=2.0.0",
+    "tqdm",
+    "sounddevice",
+    "scipy",
+    "numpy",
+    "phonemizer",
+    "transformers"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/cheuerde/kokoro-tts-cli"
+"Bug Tracker" = "https://github.com/cheuerde/kokoro-tts-cli/issues"
+
+[project.scripts]
+kokoro-tts = "kokoro_tts_cli.streamer:main"
