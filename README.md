@@ -158,6 +158,67 @@ The server mode is particularly useful when:
 - Running a TTS service on a powerful machine
 - Reducing startup time for frequent TTS operations
 
+### Processing Modes
+
+Both `kokoro-tts` and `kokoro-tts-client` support different processing modes:
+
+1. Streaming Mode (default)
+```bash
+# Starts playing immediately as text is processed
+cat long_text.txt | kokoro-tts
+cat long_text.txt | kokoro-tts-client
+```
+
+2. Batch Mode
+```bash
+# Process entire text at once (faster for wav generation)
+cat text.txt | kokoro-tts --batch --save output.wav
+cat text.txt | kokoro-tts-client --batch --save output.wav
+
+# Batch processing with progress info
+cat text.txt | kokoro-tts --batch --verbose --save output.wav
+```
+
+3. Interactive Mode (kokoro-tts only)
+```bash
+# Full playback control
+cat story.txt | kokoro-tts -i
+```
+
+### Integration Examples
+
+Kokoro TTS CLI can be easily integrated with other tools:
+
+1. PDF to Speech
+```bash
+# Read PDF file
+pdftotext document.pdf - | kokoro-tts
+
+# With server mode
+pdftotext document.pdf - | kokoro-tts-client
+```
+
+2. LLM Processing Pipeline
+```bash
+# Extract funny segments from text using LLM and speak them
+pdftotext bartleby.pdf - | llm prompt -m phi4 "find the most relatable quote about refusing to do work tasks" | kokoro-tts
+
+# Using server mode for faster processing
+pdftotext novel.pdf - | llm prompt -m phi4 "extract the most dramatic scene" | kokoro-tts-client
+
+# Generate and narrate summaries
+pdftotext technical_doc.pdf - | \
+    llm prompt -m phi4 -s "Summarize this technical document in simple terms" | \
+    kokoro-tts-client --voice "bf_emma"
+
+# Mix voices for dialogue extraction
+pdftotext play.pdf - | \
+    llm prompt -m phi4 "extract a dialogue between two characters" | \
+    kokoro-tts-client --voice "af_bella:0.6,am_adam:0.4"
+```
+
+These pipelines combine text extraction, LLM processing, and speech synthesis to create powerful text-to-speech workflows. The server mode is particularly useful for processing multiple requests efficiently.
+
 ## Available Voices
 
 American English (en-us):

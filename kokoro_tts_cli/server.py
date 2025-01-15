@@ -60,22 +60,20 @@ class KokoroTTSServer:
     def handle_client(self, client_socket: socket.socket):
         """Handle individual client connection."""
         try:
-            # Receive request length
-            length_bytes = client_socket.recv(4)
-            if not length_bytes:
-                return
-            
-            request_length = int.from_bytes(length_bytes, byteorder='big')
-            
-            # Receive full request
+            # Receive the request data
             request_data = b''
-            while len(request_data) < request_length:
-                chunk = client_socket.recv(min(4096, request_length - len(request_data)))
+            while True:
+                chunk = client_socket.recv(4096)
                 if not chunk:
-                    return
+                    break
                 request_data += chunk
+                
+                try:
+                    request = json.loads(request_data.decode())
+                    break  # Valid JSON received
+                except json.JSONDecodeError:
+                    continue  # Keep reading until we have complete JSON
             
-            request = json.loads(request_data.decode('utf-8'))
             text = request.get('text', '')
             voice_spec = request.get('voice', 'af')
             speed = request.get('speed', 1.0)
@@ -83,40 +81,34 @@ class KokoroTTSServer:
             voicepack, primary_voice = self.load_voice(voice_spec)
             lang = primary_voice[0]
             
-            # Process text chunks
+            # Process text
             chunks = create_chunks(text, lang)
-            audio_chunks = []
             
+            # Generate audio for all chunks
+            audio = None
             for chunk in chunks:
-                audio, _ = generate(
+                chunk_audio, _ = generate(
                     self.model,
                     chunk,
                     voicepack,
                     lang,
                     speed
                 )
-                if audio is not None:
-                    audio_chunks.append(audio)
+                if chunk_audio is not None:
+                    if audio is None:
+                        audio = chunk_audio
+                    else:
+                        audio = np.concatenate([audio, chunk_audio])
             
-            # Send response with length prefix
-            response = {
-                'chunks': len(audio_chunks),
-                'sample_rate': 24000
-            }
-            response_data = json.dumps(response).encode('utf-8')
-            length_prefix = len(response_data).to_bytes(4, byteorder='big')
-            client_socket.sendall(length_prefix + response_data)
-            
-            # Send audio chunks with length prefixes
-            for chunk in audio_chunks:
-                chunk_data = chunk.tobytes()
-                chunk_length = len(chunk_data).to_bytes(4, byteorder='big')
-                client_socket.sendall(chunk_length + chunk_data)
-            
+            # Send audio data
+            if audio is not None:
+                client_socket.sendall(audio.tobytes())
+                
         except Exception as e:
             print(f"Error handling client: {e}")
         finally:
             client_socket.close()
+
 
     def start(self):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

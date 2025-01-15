@@ -4,9 +4,10 @@ from .client import KokoroTTSClient
 from .streamer import show_usage_guide
 
 def run_client():
+    """Entry point for the client CLI tool."""
     parser = argparse.ArgumentParser(description='Kokoro TTS Client')
     parser.add_argument('--voice', default='af',
-                      help='Voice to use for TTS or mix specification')
+                      help='Voice to use for TTS or mix specification (e.g., "af_bella:0.7,bf_emma:0.3")')
     parser.add_argument('--speed', type=float, default=1.0,
                       help='Speech speed multiplier (0.5-2.0)')
     parser.add_argument('--save', type=str,
@@ -23,24 +24,48 @@ def run_client():
                       help='Server host (default: localhost)')
     parser.add_argument('--port', type=int, default=5000,
                       help='Server port (default: 5000)')
+    parser.add_argument('--batch', action='store_true',
+                      help='Process entire input at once (faster for wav generation, no streaming)')
+    parser.add_argument('--help-guide', action='store_true',
+                      help='Show detailed usage guide')
     args = parser.parse_args()
-    
+
+    if args.help_guide:
+        show_usage_guide()
+        return
+
     try:
         client = KokoroTTSClient(host=args.host, port=args.port)
-        text = sys.stdin.read()
         
-        if args.verbose:
-            print(f"Connecting to server at {args.host}:{args.port}", file=sys.stderr)
+        if args.batch:
+            # Read entire input at once
+            text = sys.stdin.read()
+            if args.verbose:
+                print("Processing entire text in batch mode...", file=sys.stderr)
+            client.synthesize(
+                text=text,
+                voice=args.voice,
+                speed=args.speed,
+                save_path=args.save,
+                play_audio=args.play,
+                output_raw=args.output_raw,
+                verbose=args.verbose
+            )
+        else:
+            # Streaming mode
+            if args.verbose:
+                print(f"Connecting to server at {args.host}:{args.port}", file=sys.stderr)
+                print("Processing text in streaming mode...", file=sys.stderr)
             
-        client.synthesize(
-            text=text,
-            voice=args.voice,
-            speed=args.speed,
-            save_path=args.save,
-            play_audio=args.play,
-            output_raw=args.output_raw,
-            verbose=args.verbose 
-        )
+            client.process_stream(
+                sys.stdin,
+                voice=args.voice,
+                speed=args.speed,
+                save_path=args.save,
+                play_audio=args.play,
+                output_raw=args.output_raw,
+                verbose=args.verbose
+            )
         
     except ConnectionRefusedError:
         print(f"\nError: Could not connect to server at {args.host}:{args.port}", file=sys.stderr)

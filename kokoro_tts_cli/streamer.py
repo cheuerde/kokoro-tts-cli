@@ -1,11 +1,10 @@
 import warnings 
+warnings.simplefilter("ignore")  # Suppress all warnings
+# Or if you want to be more specific:
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
 import os
 import sys
-
-# Suppress specific PyTorch warnings
-warnings.filterwarnings("ignore", message=".*weight_norm is deprecated.*")
-warnings.filterwarnings("ignore", message=".*dropout option adds dropout.*")
-
 import queue
 import time
 import curses
@@ -13,8 +12,29 @@ import argparse
 import sounddevice as sd
 import numpy as np
 import re
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Iterator
 from pathlib import Path
+
+def process_text_stream(text_iterator: Iterator[str]) -> Iterator[str]:
+    """Process text into meaningful chunks (sentences/paragraphs)."""
+    buffer = ""
+    sentence_end = re.compile(r'[.!?]\s+')
+    
+    for chunk in text_iterator:
+        buffer += chunk
+        
+        while True:
+            match = sentence_end.search(buffer)
+            if not match:
+                break
+                
+            # Extract the complete sentence
+            yield buffer[:match.end()].strip()
+            buffer = buffer[match.end():]
+    
+    # Don't forget remaining text
+    if buffer.strip():
+        yield buffer.strip()
 
 def find_kokoro_path() -> Path:
     """Find Kokoro-82M directory from common locations or environment variable."""
@@ -330,6 +350,23 @@ class InteractiveTTS:
         self.stdscr.addstr(6, 0, "Press [Esc] to exit")
         self.stdscr.refresh()
 
+def process_text_chunks(text: str, model, voicepack, primary_voice, 
+                       streamer: AudioStreamer, speed: float, verbose: bool = False):
+    """Process text in chunks for interactive mode."""
+    chunks = create_chunks(text, primary_voice[0])
+    for chunk in chunks:
+        if verbose:
+            print(f"Processing: {chunk[:50]}...", file=sys.stderr)
+        audio, _ = generate(
+            model,
+            chunk,
+            voicepack,
+            primary_voice[0],
+            speed
+        )
+        if audio is not None:
+            streamer.play_audio(audio)
+
 def show_usage_guide():
     """Show detailed usage guide with examples and explanations."""
     print("""
@@ -426,6 +463,8 @@ def main():
                       help='Do not play audio while processing')
     parser.add_argument('--kokoro-path', type=str,
                       help='Path to Kokoro-82M directory')
+    parser.add_argument('--batch', action='store_true',
+                      help='Process entire input at once (faster for wav generation, no streaming)')
     args = parser.parse_args()
     
     try:
@@ -433,13 +472,12 @@ def main():
         model = build_model(KOKORO_PATH / 'kokoro-v0_19.pth', device)
         
         # Handle voice loading with mixing support
-        if ':' in args.voice:  # It's a voice mix specification
+        if ':' in args.voice:  # Voice mix specification
             voice_mix = {}
             voices_dir = KOKORO_PATH / 'voices'
             for part in args.voice.split(','):
                 name, weight = part.split(':')
                 weight = float(weight)
-                # Verify voice exists
                 if not (voices_dir / f'{name}.pt').exists():
                     raise FileNotFoundError(
                         f"Voice '{name}' not found.\n"
@@ -448,14 +486,12 @@ def main():
                     )
                 voice_mix[name] = weight
             
-            # Load and mix voices
             mixed_voice = sum(
                 torch.load(voices_dir / f'{name}.pt', weights_only=True).to(device) * weight
                 for name, weight in voice_mix.items()
             )
             voicepack = mixed_voice
             primary_voice = max(voice_mix.items(), key=lambda x: x[1])[0]
-            voice_name = f"mix({','.join(f'{k}:{v:.1f}' for k,v in voice_mix.items())})"
         else:  # Single voice
             voice_path = KOKORO_PATH / 'voices' / f'{args.voice}.pt'
             if not voice_path.exists():
@@ -466,38 +502,84 @@ def main():
                 )
             voicepack = torch.load(voice_path, weights_only=True).to(device)
             primary_voice = args.voice
-            voice_name = args.voice
-        
-        if args.verbose:
-            if ':' in args.voice:
-                print(f"Using mixed voice: {voice_name}", file=sys.stderr)
-            else:
-                print(f"Using voice: {voice_name}", file=sys.stderr)
-        
-        # Don't play audio if output-raw is specified
-        play_audio = args.play and not args.output_raw
-        
+
         # Initialize audio streamer
         streamer = AudioStreamer(
             save_path=args.save,
-            play_audio=play_audio,
+            play_audio=args.play,
             output_raw=args.output_raw
         )
         streamer.speed_multiplier = args.speed
-        
-        # Create TTS handler with primary voice for language selection
-        tts = InteractiveTTS(model, voicepack, streamer, primary_voice)
-        
-        # Read all input text
-        text = sys.stdin.read()
-        
-        if args.interactive and sys.stdin.isatty():
-            curses.wrapper(lambda stdscr: (
-                tts.handle_keyboard(stdscr),
-                tts.process_text(text, args.verbose)
-            ))
+
+        if args.batch or args.interactive:
+            # Process everything at once
+            text = sys.stdin.read()
+            
+            if args.interactive:
+                curses.wrapper(lambda stdscr: (
+                    streamer.handle_keyboard(stdscr),
+                    process_text_chunks(text, model, voicepack, primary_voice, 
+                                     streamer, args.speed, args.verbose)
+                ))
+            else:
+                # Batch processing
+                chunks = create_chunks(text, primary_voice[0])
+                
+                if args.verbose:
+                    print(f"Processing {len(chunks)} chunks in batch mode...", file=sys.stderr)
+                
+                all_audio = []
+                for i, chunk in enumerate(chunks, 1):
+                    if args.verbose:
+                        print(f"Processing chunk {i}/{len(chunks)}", file=sys.stderr)
+                    
+                    audio, _ = generate(
+                        model,
+                        chunk,
+                        voicepack,
+                        primary_voice[0],
+                        args.speed
+                    )
+                    if audio is not None:
+                        all_audio.append(audio)
+                
+                if all_audio:
+                    combined_audio = np.concatenate(all_audio)
+                    if args.save:
+                        if args.verbose:
+                            print(f"Saving audio to {args.save}", file=sys.stderr)
+                        from scipy.io.wavfile import write as wavfile_write
+                        wavfile_write(args.save, 24000, combined_audio)
+                    elif args.play:
+                        streamer.play_audio(combined_audio)
+                        streamer.wait_until_done()
         else:
-            tts.process_text(text, args.verbose)
+            # Streaming mode
+            def text_generator():
+                while True:
+                    chunk = sys.stdin.read(1024)
+                    if not chunk:
+                        break
+                    yield chunk
+
+            # Process input stream in chunks
+            for sentence in process_text_stream(text_generator()):
+                if sentence.strip():
+                    if args.verbose:
+                        print(f"Processing: {sentence[:50]}...", file=sys.stderr)
+                    
+                    chunks = create_chunks(sentence, primary_voice[0])
+                    for chunk in chunks:
+                        audio, _ = generate(
+                            model,
+                            chunk,
+                            voicepack,
+                            primary_voice[0],
+                            args.speed
+                        )
+                        if audio is not None:
+                            streamer.play_audio(audio)
+
             streamer.wait_until_done()
             
     except KeyboardInterrupt:
