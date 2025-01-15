@@ -58,12 +58,24 @@ class KokoroTTSServer:
             return self.voices[voice_spec], voice_spec
 
     def handle_client(self, client_socket: socket.socket):
+        """Handle individual client connection."""
         try:
-            data = client_socket.recv(4096).decode('utf-8')
-            if not data:
+            # Receive request length
+            length_bytes = client_socket.recv(4)
+            if not length_bytes:
                 return
-                
-            request = json.loads(data)
+            
+            request_length = int.from_bytes(length_bytes, byteorder='big')
+            
+            # Receive full request
+            request_data = b''
+            while len(request_data) < request_length:
+                chunk = client_socket.recv(min(4096, request_length - len(request_data)))
+                if not chunk:
+                    return
+                request_data += chunk
+            
+            request = json.loads(request_data.decode('utf-8'))
             text = request.get('text', '')
             voice_spec = request.get('voice', 'af')
             speed = request.get('speed', 1.0)
@@ -71,6 +83,7 @@ class KokoroTTSServer:
             voicepack, primary_voice = self.load_voice(voice_spec)
             lang = primary_voice[0]
             
+            # Process text chunks
             chunks = create_chunks(text, lang)
             audio_chunks = []
             
@@ -83,17 +96,23 @@ class KokoroTTSServer:
                     speed
                 )
                 if audio is not None:
-                    audio_chunks.append(audio.tobytes())
+                    audio_chunks.append(audio)
             
+            # Send response with length prefix
             response = {
                 'chunks': len(audio_chunks),
                 'sample_rate': 24000
             }
-            client_socket.send(json.dumps(response).encode('utf-8'))
+            response_data = json.dumps(response).encode('utf-8')
+            length_prefix = len(response_data).to_bytes(4, byteorder='big')
+            client_socket.sendall(length_prefix + response_data)
             
+            # Send audio chunks with length prefixes
             for chunk in audio_chunks:
-                client_socket.send(chunk)
-                
+                chunk_data = chunk.tobytes()
+                chunk_length = len(chunk_data).to_bytes(4, byteorder='big')
+                client_socket.sendall(chunk_length + chunk_data)
+            
         except Exception as e:
             print(f"Error handling client: {e}")
         finally:

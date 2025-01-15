@@ -38,7 +38,8 @@ def run_client():
             speed=args.speed,
             save_path=args.save,
             play_audio=args.play,
-            output_raw=args.output_raw
+            output_raw=args.output_raw,
+            verbose=args.verbose 
         )
         
     except ConnectionRefusedError:
