@@ -406,13 +406,6 @@ def main():
     args = parser.parse_args()
     
     try:
-        # Check if stdin has data
-        if sys.stdin.isatty() and not sys.stdin.read(1):
-            show_usage_guide()
-            sys.exit(0)
-        else:
-            # Put back the character we read
-            sys.stdin.seek(0)
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         model = build_model(KOKORO_PATH / 'kokoro-v0_19.pth', device)
         
