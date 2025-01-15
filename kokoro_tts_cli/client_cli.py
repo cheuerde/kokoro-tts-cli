@@ -1,13 +1,12 @@
-import argparse
 import sys
+import argparse
 from .client import KokoroTTSClient
 from .streamer import show_usage_guide
 
 def run_client():
-    """Entry point for the client CLI tool."""
     parser = argparse.ArgumentParser(description='Kokoro TTS Client')
     parser.add_argument('--voice', default='af',
-                      help='Voice to use for TTS or mix specification (e.g., "af_bella:0.7,bf_emma:0.3")')
+                      help='Voice to use for TTS or mix specification')
     parser.add_argument('--speed', type=float, default=1.0,
                       help='Speech speed multiplier (0.5-2.0)')
     parser.add_argument('--save', type=str,
@@ -24,14 +23,8 @@ def run_client():
                       help='Server host (default: localhost)')
     parser.add_argument('--port', type=int, default=5000,
                       help='Server port (default: 5000)')
-    parser.add_argument('--help-guide', action='store_true',
-                      help='Show detailed usage guide')
     args = parser.parse_args()
-
-    if args.help_guide:
-        show_usage_guide()
-        return
-
+    
     try:
         client = KokoroTTSClient(host=args.host, port=args.port)
         text = sys.stdin.read()

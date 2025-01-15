@@ -3,15 +3,14 @@ import sys
 import socket
 import json
 import torch
-from pathlib import Path
-from typing import Optional
 import threading
+import argparse
+from pathlib import Path
 from .streamer import (
     find_kokoro_path,
     build_model,
     generate,
-    create_chunks,
-    AudioStreamer
+    create_chunks
 )
 
 class KokoroTTSServer:
@@ -30,17 +29,16 @@ class KokoroTTSServer:
         self.voices_dir = kokoro_path / 'voices'
         
     def load_voice(self, voice_spec: str) -> tuple:
-        """Load single voice or voice mix."""
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         
-        if ':' in voice_spec:  # Voice mix
+        if ':' in voice_spec:
             voice_mix = {}
             for part in voice_spec.split(','):
                 name, weight = part.split(':')
                 weight = float(weight)
                 if name not in self.voices:
                     self.voices[name] = torch.load(
-                        self.voices_dir / f'{name}.pt', 
+                        self.voices_dir / f'{name}.pt',
                         weights_only=True
                     ).to(device)
                 voice_mix[name] = weight
@@ -51,7 +49,7 @@ class KokoroTTSServer:
             )
             primary_voice = max(voice_mix.items(), key=lambda x: x[1])[0]
             return mixed_voice, primary_voice
-        else:  # Single voice
+        else:
             if voice_spec not in self.voices:
                 self.voices[voice_spec] = torch.load(
                     self.voices_dir / f'{voice_spec}.pt',
@@ -60,47 +58,41 @@ class KokoroTTSServer:
             return self.voices[voice_spec], voice_spec
 
     def handle_client(self, client_socket: socket.socket):
-        """Handle individual client connection."""
         try:
-            while True:
-                data = client_socket.recv(4096).decode('utf-8')
-                if not data:
-                    break
-                    
-                request = json.loads(data)
-                text = request.get('text', '')
-                voice_spec = request.get('voice', 'af')
-                speed = request.get('speed', 1.0)
-                save_path = request.get('save_path')
+            data = client_socket.recv(4096).decode('utf-8')
+            if not data:
+                return
                 
-                voicepack, primary_voice = self.load_voice(voice_spec)
-                lang = primary_voice[0]
-                
-                # Process text chunks
-                chunks = create_chunks(text, lang)
-                audio_chunks = []
-                
-                for chunk in chunks:
-                    audio, _ = generate(
-                        self.model, 
-                        chunk, 
-                        voicepack, 
-                        lang, 
-                        speed
-                    )
-                    if audio is not None:
-                        audio_chunks.append(audio.tobytes())
-                
-                # Send response
-                response = {
-                    'chunks': len(audio_chunks),
-                    'sample_rate': 24000
-                }
-                client_socket.send(json.dumps(response).encode('utf-8'))
-                
-                # Send audio chunks
-                for chunk in audio_chunks:
-                    client_socket.send(chunk)
+            request = json.loads(data)
+            text = request.get('text', '')
+            voice_spec = request.get('voice', 'af')
+            speed = request.get('speed', 1.0)
+            
+            voicepack, primary_voice = self.load_voice(voice_spec)
+            lang = primary_voice[0]
+            
+            chunks = create_chunks(text, lang)
+            audio_chunks = []
+            
+            for chunk in chunks:
+                audio, _ = generate(
+                    self.model,
+                    chunk,
+                    voicepack,
+                    lang,
+                    speed
+                )
+                if audio is not None:
+                    audio_chunks.append(audio.tobytes())
+            
+            response = {
+                'chunks': len(audio_chunks),
+                'sample_rate': 24000
+            }
+            client_socket.send(json.dumps(response).encode('utf-8'))
+            
+            for chunk in audio_chunks:
+                client_socket.send(chunk)
                 
         except Exception as e:
             print(f"Error handling client: {e}")
@@ -108,7 +100,6 @@ class KokoroTTSServer:
             client_socket.close()
 
     def start(self):
-        """Start the TTS server."""
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.server_socket.bind((self.host, self.port))
@@ -127,18 +118,15 @@ class KokoroTTSServer:
                 )
                 client_thread.start()
             except Exception as e:
-                print(f"Error accepting connection: {e}")
-                if not self.running:
-                    break
+                if self.running:
+                    print(f"Error accepting connection: {e}")
 
     def stop(self):
-        """Stop the TTS server."""
         self.running = False
         if self.server_socket:
             self.server_socket.close()
 
 def run_server():
-    """Entry point for running the server."""
     parser = argparse.ArgumentParser(description='Kokoro TTS Server')
     parser.add_argument('--host', default='localhost',
                       help='Server host (default: localhost)')
