@@ -346,11 +346,7 @@ def main():
                       help='Path to Kokoro-82M directory')
     args = parser.parse_args()
     
-def main():
-    parser = argparse.ArgumentParser(description='Kokoro TTS Streaming Tool')
-    parser.add_argument('--voice', default='af',
-                      help='Voice to use for TTS or mix specification (e.g., "af_bella:0.7,bf_emma:0.3")')
-    # ... (rest of argument parsing) ...
+
     
     try:
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
