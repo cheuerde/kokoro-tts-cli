@@ -324,6 +324,65 @@ class InteractiveTTS:
         self.stdscr.addstr(6, 0, "Press [Esc] to exit")
         self.stdscr.refresh()
 
+def show_usage_guide():
+    """Show detailed usage guide with examples and explanations."""
+    print("""
+Kokoro TTS CLI - Text-to-Speech Interface
+========================================
+
+Basic Usage:
+-----------
+  echo 'Your text here' | kokoro-tts    # Basic TTS with default voice
+  cat file.txt | kokoro-tts             # Process a text file
+  kokoro-tts -i < story.txt             # Interactive mode with controls
+
+Voice Options:
+-------------
+Single Voice:
+  kokoro-tts --voice af_bella           # American female (Bella)
+  kokoro-tts --voice bf_emma            # British female (Emma)
+  kokoro-tts --voice am_adam            # American male (Adam)
+
+Voice Mixing:
+  kokoro-tts --voice "af_bella:0.7,bf_emma:0.3"   # 70% Bella, 30% Emma
+
+Available Voices:
+  American (en-us): af_bella, af_sarah, am_adam, am_michael, af_nicole, af_sky
+  British (en-gb):  bf_emma, bf_isabella, bm_george, bm_lewis
+
+Playback Controls:
+----------------
+  --speed 1.2                           # Adjust speech speed (0.5-2.0)
+  --save output.wav                     # Save to WAV file
+  --no-play                             # Generate without playback
+  --verbose                             # Show processing details
+
+Interactive Mode Controls:
+-----------------------
+  Space:        Pause/Resume
+  Left/Right:   Adjust speed
+  Esc:          Exit
+
+Examples:
+--------
+1. Basic TTS:
+   echo 'Hello! How are you today?' | kokoro-tts
+
+2. Specific voice with speed:
+   echo 'Reading quickly!' | kokoro-tts --voice af_bella --speed 1.3
+
+3. Voice mixing:
+   echo 'Mixed voice test.' | kokoro-tts --voice "af_bella:0.6,bf_emma:0.4"
+
+4. Process file interactively:
+   kokoro-tts -i < story.txt
+
+5. Save without playing:
+   cat text.txt | kokoro-tts --no-play --save output.wav
+
+For more information, use: kokoro-tts --help
+""")
+
 def main():
     parser = argparse.ArgumentParser(description='Kokoro TTS Streaming Tool')
     parser.add_argument('--voice', default='af',
@@ -346,9 +405,14 @@ def main():
                       help='Path to Kokoro-82M directory')
     args = parser.parse_args()
     
-
-    
     try:
+        # Check if stdin has data
+        if sys.stdin.isatty() and not sys.stdin.read(1):
+            show_usage_guide()
+            sys.exit(0)
+        else:
+            # Put back the character we read
+            sys.stdin.seek(0)
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         model = build_model(KOKORO_PATH / 'kokoro-v0_19.pth', device)
         
