@@ -28,72 +28,137 @@ git clone https://huggingface.co/hexgrad/Kokoro-82M
 ## Installation
 
 ```bash
-pip install kokoro-tts-cli
+pip install git+https://github.com/cheuerde/kokoro-tts-cli.git
 ```
 
-## Usage
+## Usage Examples
 
-### Basic TTS
-
+### Quick Start
 ```bash
-# Simple text-to-speech
-echo "Hello, world!" | kokoro-tts
+# Simple text (use single quotes for text with exclamation marks)
+echo 'Hello! How are you today?' | kokoro-tts
 
-# Specify voice
-echo "Hello!" | kokoro-tts --voice af_bella
+# Longer text
+echo 'Once upon a time, in a digital realm far beyond our screens, there lived a unique artificial voice. This voice was not just any voice - it could sing, whisper, and tell stories with remarkable clarity!' | kokoro-tts
+```
 
-# Use specific speed
-echo "Hello!" | kokoro-tts --speed 1.2
+### Voice Selection
+```bash
+# American female voice (Bella)
+echo 'The quick brown fox jumps over the lazy dog. This sentence contains all letters of the alphabet!' | kokoro-tts --voice af_bella
 
-# Save to file
-echo "Hello!" | kokoro-tts --save output.wav
+# British female voice (Emma)
+echo 'Would you like a cup of tea? British voices have their own unique charm.' | kokoro-tts --voice bf_emma
+
+# American male voice (Adam)
+echo 'Deep in the mountains, a lone traveler found an ancient manuscript.' | kokoro-tts --voice am_adam
+```
+
+### Voice Mixing
+```bash
+# Mix American female voices (70% Bella, 30% Sarah)
+echo 'Voice mixing creates interesting new voice characteristics!' | kokoro-tts --voice "af_bella:0.7,af_sarah:0.3"
+
+# Mix female and male voices
+echo 'This is a balanced mix of different voice types.' | kokoro-tts --voice "bf_emma:0.4,am_adam:0.3,af_bella:0.3"
+
+# Create smooth transitions between voices
+echo 'First part in one voice, second part in another.' | kokoro-tts --voice "af_bella:0.6,bf_emma:0.4"
+```
+
+### Speed Control
+```bash
+# Faster speech
+echo 'This will be spoken quickly, perfect for speed reading!' | kokoro-tts --speed 1.5
+
+# Slower speech
+echo 'This will be spoken slowly and clearly, good for learning pronunciation.' | kokoro-tts --speed 0.8
+```
+
+### File Processing
+```bash
+# Process a text file
+cat story.txt | kokoro-tts --verbose
+
+# Save to audio file
+cat article.txt | kokoro-tts --save output.wav
+
+# Process and save without playback
+cat script.txt | kokoro-tts --no-play --save output.wav
 ```
 
 ### Interactive Mode
-
 ```bash
-# Process text file with interactive controls
-kokoro-tts -i < input.txt
+# Process file with interactive controls
+kokoro-tts -i < story.txt
+
+# Process text from clipboard (macOS)
+pbpaste | kokoro-tts -i
 ```
 
-Controls:
+Interactive Controls:
 - Space: Pause/Resume
-- Left/Right arrows: Adjust speed
+- Left/Right arrows: Adjust speed (0.5x - 2.0x)
 - Esc: Exit
 
-### Additional Options
+### Example Text Files
 
+The repository includes example texts in `examples/`:
 ```bash
-# Show help
-kokoro-tts --help
+# Story example
+cat examples/story.txt | kokoro-tts --voice af_bella
 
-# Generate without playback
-echo "Hello!" | kokoro-tts --no-play --save output.wav
+# Technical text
+cat examples/technical.txt | kokoro-tts --voice "af_bella:0.6,am_adam:0.4"
 
-# Show progress
-echo "Hello!" | kokoro-tts --verbose
-
-# Specify Kokoro model path
-echo "Hello!" | kokoro-tts --kokoro-path /path/to/Kokoro-82M
+# Mixed content with voice mixing
+cat examples/mixed.txt | kokoro-tts --voice "bf_emma:0.5,af_sarah:0.5"
 ```
 
 ## Available Voices
 
-- af (default)
-- af_bella
-- af_sarah
-- am_adam
-- am_michael
-- bf_emma
-- bf_isabella
-- bm_george
-- bm_lewis
-- af_nicole
-- af_sky
+American English (en-us):
+- af_bella - Bella (female)
+- af_sarah - Sarah (female)
+- am_adam - Adam (male)
+- am_michael - Michael (male)
+- af_nicole - Nicole (female)
+- af_sky - Sky (female)
+
+British English (en-gb):
+- bf_emma - Emma (female)
+- bf_isabella - Isabella (female)
+- bm_george - George (male)
+- bm_lewis - Lewis (male)
 
 ## Environment Variables
 
 - `KOKORO_PATH`: Path to Kokoro-82M directory
+  ```bash
+  export KOKORO_PATH=/path/to/Kokoro-82M
+  ```
+
+## Tips
+
+1. Use single quotes for text with exclamation marks:
+```bash
+echo 'Wow! This is amazing!' | kokoro-tts
+```
+
+2. For long texts, use files:
+```bash
+echo 'Long text...' > input.txt
+kokoro-tts < input.txt
+```
+
+3. Mix voices for unique characteristics:
+```bash
+# Warm, friendly voice
+kokoro-tts --voice "af_bella:0.6,bf_emma:0.4"
+
+# Authoritative voice
+kokoro-tts --voice "am_adam:0.7,bm_george:0.3"
+```
 
 ## Acknowledgements
 
