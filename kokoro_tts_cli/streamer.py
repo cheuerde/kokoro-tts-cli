@@ -327,7 +327,7 @@ class InteractiveTTS:
 def main():
     parser = argparse.ArgumentParser(description='Kokoro TTS Streaming Tool')
     parser.add_argument('--voice', default='af',
-                      help='Voice to use for TTS')
+                      help='Voice to use for TTS or mix specification (e.g., "af_bella:0.7,bf_emma:0.3")')
     parser.add_argument('--speed', type=float, default=1.0,
                       help='Speech speed multiplier (0.5-2.0)')
     parser.add_argument('--save', type=str,
@@ -346,19 +346,41 @@ def main():
                       help='Path to Kokoro-82M directory')
     args = parser.parse_args()
     
+def main():
+    parser = argparse.ArgumentParser(description='Kokoro TTS Streaming Tool')
+    parser.add_argument('--voice', default='af',
+                      help='Voice to use for TTS or mix specification (e.g., "af_bella:0.7,bf_emma:0.3")')
+    # ... (rest of argument parsing) ...
+    
     try:
-        if args.kokoro_path:
-            global KOKORO_PATH
-            KOKORO_PATH = Path(args.kokoro_path)
-            if not (KOKORO_PATH / 'kokoro-v0_19.pth').exists():
-                raise FileNotFoundError(f"Kokoro model not found in {KOKORO_PATH}")
-            sys.path.insert(0, str(KOKORO_PATH))
-        
-        # Setup
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         model = build_model(KOKORO_PATH / 'kokoro-v0_19.pth', device)
         
-        try:
+        # Handle voice loading with mixing support
+        if ':' in args.voice:  # It's a voice mix specification
+            voice_mix = {}
+            voices_dir = KOKORO_PATH / 'voices'
+            for part in args.voice.split(','):
+                name, weight = part.split(':')
+                weight = float(weight)
+                # Verify voice exists
+                if not (voices_dir / f'{name}.pt').exists():
+                    raise FileNotFoundError(
+                        f"Voice '{name}' not found.\n"
+                        f"Available voices:\n"
+                        f"  {', '.join(v.stem for v in voices_dir.glob('*.pt'))}"
+                    )
+                voice_mix[name] = weight
+            
+            # Load and mix voices
+            mixed_voice = sum(
+                torch.load(voices_dir / f'{name}.pt', weights_only=True).to(device) * weight
+                for name, weight in voice_mix.items()
+            )
+            voicepack = mixed_voice
+            primary_voice = max(voice_mix.items(), key=lambda x: x[1])[0]
+            voice_name = f"mix({','.join(f'{k}:{v:.1f}' for k,v in voice_mix.items())})"
+        else:  # Single voice
             voice_path = KOKORO_PATH / 'voices' / f'{args.voice}.pt'
             if not voice_path.exists():
                 raise FileNotFoundError(
@@ -367,9 +389,14 @@ def main():
                     f"  {', '.join(v.stem for v in (KOKORO_PATH / 'voices').glob('*.pt'))}"
                 )
             voicepack = torch.load(voice_path, weights_only=True).to(device)
-        except Exception as e:
-            print(f"\nError loading voice: {str(e)}", file=sys.stderr)
-            sys.exit(1)
+            primary_voice = args.voice
+            voice_name = args.voice
+        
+        if args.verbose:
+            if ':' in args.voice:
+                print(f"Using mixed voice: {voice_name}", file=sys.stderr)
+            else:
+                print(f"Using voice: {voice_name}", file=sys.stderr)
         
         # Don't play audio if output-raw is specified
         play_audio = args.play and not args.output_raw
@@ -382,20 +409,18 @@ def main():
         )
         streamer.speed_multiplier = args.speed
         
-        # Create TTS handler
-        tts = InteractiveTTS(model, voicepack, streamer, args.voice)
+        # Create TTS handler with primary voice for language selection
+        tts = InteractiveTTS(model, voicepack, streamer, primary_voice)
         
         # Read all input text
         text = sys.stdin.read()
         
         if args.interactive and sys.stdin.isatty():
-            # Run in interactive mode with curses
             curses.wrapper(lambda stdscr: (
                 tts.handle_keyboard(stdscr),
                 tts.process_text(text, args.verbose)
             ))
         else:
-            # Run in normal mode
             tts.process_text(text, args.verbose)
             streamer.wait_until_done()
             
@@ -403,7 +428,7 @@ def main():
         print("\nInterrupted by user", file=sys.stderr)
         sys.exit(0)
     except Exception as e:
-        print(f"\nUnexpected error: {str(e)}", file=sys.stderr)
+        print(f"\nError: {str(e)}", file=sys.stderr)
         sys.exit(1)
 
 if __name__ == "__main__":
