@@ -1,5 +1,11 @@
+import warnings 
 import os
 import sys
+
+# Suppress specific PyTorch warnings
+warnings.filterwarnings("ignore", message=".*weight_norm is deprecated.*")
+warnings.filterwarnings("ignore", message=".*dropout option adds dropout.*")
+
 import queue
 import time
 import curses
